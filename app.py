@@ -56,10 +56,16 @@ with st.sidebar:
     makan_mode = st.number_input("Biasanya (Normal)", value=1500000)
     makan_max = st.number_input("Paling Boros", value=2400000)
 
+    # --- PERBAIKAN: MENAMBAHKAN INPUT TRANSPORT (AGAR TIDAK ERROR) ---
+    st.subheader("3. Estimasi Transport")
+    st.caption("Distribusi Normal (Rata-rata & Variasi)")
+    trans_mean = st.number_input("Rata-rata Transport (Rp)", value=300000, step=10000)
+    trans_std = st.number_input("Variasi Naik/Turun (Rp)", value=50000, step=5000)
+    # -----------------------------------------------------------------
+
     st.markdown("---")
 
     # --- BAGIAN 2: PENGATURAN LANJUT (DISEMBUNYIKAN/EXPANDER) ---
-    # Ini supaya user awam tidak pusing lihat istilah teknis
     with st.expander("⚙️ Pengaturan Lanjut (Advanced)"):
         st.info("Atur bagian ini jika ingin simulasi lebih mendetail.")
         
@@ -95,11 +101,14 @@ if run_sim:
         
         biaya_kost = np.random.normal(850000, 50000, N_SIMULATIONS)
         
-        # Triangular
+        # Triangular untuk Makan
         c_makan = (makan_mode - makan_min) / (makan_max - makan_min)
         biaya_makan = stats.triang.ppf(u_makan, c=c_makan, loc=makan_min, scale=makan_max-makan_min)
         
-        biaya_transport = stats.norm.ppf(u_trans, loc=trans_mean, scale=trans_std) # <--- INI YANG DIUBAH
+        # Normal untuk Transport (Sekarang aman karena trans_mean sudah ada)
+        biaya_transport = stats.norm.ppf(u_trans, loc=trans_mean, scale=trans_std) 
+        
+        # Lognormal untuk Lifestyle
         biaya_lifestyle = stats.lognorm.ppf(u_life, s=lifestyle_sigma, scale=np.exp(lifestyle_mu))
         
         is_darurat = np.random.rand(N_SIMULATIONS) < prob_darurat
@@ -115,11 +124,10 @@ if run_sim:
     gap = BUDGET - safe_budget_95
     
     # =========================================================
-    # UI BAGIAN 1: STATUS / VONIS (PERMINTAAN USER)
+    # UI BAGIAN 1: STATUS / VONIS
     # =========================================================
     
     if gap < 0:
-        # TAMPILAN JIKA KURANG UANG (MERAH)
         with st.container():
             st.error(f"""
             ### ⚠️ BAHAYA: UANG TIDAK CUKUP!
@@ -128,12 +136,10 @@ if run_sim:
             Budget Anda (Rp {BUDGET:,.0f}) tidak cukup untuk menutupi risiko terburuk bulan ini (Rp {safe_budget_95:,.0f}).
             Ada kemungkinan **{prob_gagal:.1f}%** uang Anda habis sebelum akhir bulan.
             """)
-            # Progress bar merah (Budget vs Kebutuhan)
             persen_terpenuhi = min(BUDGET / safe_budget_95, 1.0)
             st.progress(persen_terpenuhi, text=f"Dana hanya menutupi {persen_terpenuhi*100:.1f}% dari kebutuhan aman.")
             
     else:
-        # TAMPILAN JIKA AMAN (HIJAU)
         with st.container():
             st.success(f"""
             ### ✅ AMAN: KEUANGAN SEHAT
@@ -145,7 +151,7 @@ if run_sim:
             st.progress(1.0, text="Dana menutupi 100% kebutuhan risiko.")
 
     # =========================================================
-    # UI BAGIAN 2: DATA DETAIL (3 KOLOM)
+    # UI BAGIAN 2: DATA DETAIL
     # =========================================================
     st.divider()
     col1, col2, col3 = st.columns(3)
@@ -154,11 +160,10 @@ if run_sim:
     col3.metric("📉 Risiko Bangkrut", f"{prob_gagal:.1f}%", delta_color="inverse")
 
     # =========================================================
-    # UI BAGIAN 3: GRAFIK (UX LEBIH MUDAH DIBACA)
+    # UI BAGIAN 3: GRAFIK
     # =========================================================
     st.markdown("### 📊 Peta Risiko Pengeluaran")
     
-    # Membuat Histogram
     fig = px.histogram(
         df, x="Total", color="Status", nbins=80,
         color_discrete_map={'Normal': '#00CC96', 'Darurat': '#FF4B4B'},
@@ -166,7 +171,6 @@ if run_sim:
         labels={"Total": "Total Biaya (Rp)", "count": "Frekuensi"}
     )
     
-    # 1. Garis Uang Kamu (Putih Putus-putus)
     fig.add_vline(x=BUDGET, line_width=2, line_dash="dash", line_color="white")
     fig.add_annotation(
         x=BUDGET, y=0, text=f"Uang Kamu<br>Rp {BUDGET/1e6:.1f} Juta", 
@@ -174,7 +178,6 @@ if run_sim:
         font=dict(color="white", size=12), bgcolor="#333333"
     )
 
-    # 2. Garis Batas Aman (Oranye Solid)
     fig.add_vline(x=safe_budget_95, line_width=3, line_dash="solid", line_color="#FFA500")
     fig.add_annotation(
         x=safe_budget_95, y=0, text=f"Batas Aman<br>Rp {safe_budget_95/1e6:.1f} Juta", 
@@ -182,22 +185,18 @@ if run_sim:
         font=dict(color="#FFA500", size=12, weight="bold"), bgcolor="black"
     )
 
-    # Memindahkan legend agar tidak menutupi grafik
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=50) # Tambah margin atas biar teks tidak kepotong
+        margin=dict(t=50)
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Penjelasan Grafik Bahasa Manusia
     st.info("""
     **Cara Baca Grafik:**
     * **Area Hijau:** Pengeluaran di bulan-bulan normal.
-    * **Area Merah (Kanan):** Bulan saat kamu kena musibah (sakit/hp rusak).
-    * **Lihat Jarak Garis:**
-        * Jika garis **"Uang Kamu"** ada di sebelah KIRI garis **"Batas Aman"**, berarti kamu **KURANG** uang (Area Merah).
-        * Jika garis **"Uang Kamu"** ada di sebelah KANAN garis **"Batas Aman"**, berarti kamu **AMAN** (Area Hijau).
+    * **Area Merah (Kanan):** Bulan saat kamu kena musibah.
+    * Jika garis **"Uang Kamu"** di kiri **"Batas Aman"**, kamu berisiko!
     """)
 
 else:
