@@ -99,7 +99,7 @@ if run_sim:
         c_makan = (makan_mode - makan_min) / (makan_max - makan_min)
         biaya_makan = stats.triang.ppf(u_makan, c=c_makan, loc=makan_min, scale=makan_max-makan_min)
         
-        biaya_transport = stats.uniform.ppf(u_trans, 150000, 300000)
+        biaya_transport = stats.norm.ppf(u_trans, loc=trans_mean, scale=trans_std) # <--- INI YANG DIUBAH
         biaya_lifestyle = stats.lognorm.ppf(u_life, s=lifestyle_sigma, scale=np.exp(lifestyle_mu))
         
         is_darurat = np.random.rand(N_SIMULATIONS) < prob_darurat
